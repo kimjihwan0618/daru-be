@@ -1,0 +1,45 @@
+# 현재 단계(SQLite)에서는 docker-compose 없이도
+#   pip install -r requirements.txt && uvicorn app.main:app --reload
+# 로 바로 기동 가능합니다.
+#
+# 아래 구성은 PostgreSQL(pgvector) + Redis로 전환할 때 사용하세요.
+# 전환 절차:
+#   1. .env 의 DATABASE_URL을 postgresql+asyncpg://daru_user:daru_pass@db:5432/daru 로 변경
+#   2. requirements.txt 의 asyncpg, pgvector 주석 해제 후 재설치
+#   3. docker compose up -d 로 db, redis 기동
+#   4. alembic upgrade head
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: daru_user
+      POSTGRES_PASSWORD: daru_pass
+      POSTGRES_DB: daru
+    ports:
+      - "5432:5432"
+    volumes:
+      - daru_pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/code
+
+volumes:
+  daru_pg_data:

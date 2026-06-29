@@ -1,0 +1,71 @@
+"""
+앱 전역 설정.
+.env 파일을 읽어 Settings 객체로 노출한다.
+다른 모듈에서는 `from app.core.config import settings` 로 사용.
+"""
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # --- App ---
+    APP_NAME: str = "DARU"
+    APP_ENV: str = "development"
+    DEBUG: bool = True
+
+    # --- Database ---
+    # 현재 SQLite, 추후 DATABASE_URL만 PostgreSQL DSN으로 바꾸면 전환 가능
+    # (단, pgvector 관련 모델/쿼리는 별도 분기 필요 - app/models/news.py 주석 참고)
+    DATABASE_URL: str = "sqlite+aiosqlite:///./daru.db"
+
+    # --- Redis ---
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # --- JWT ---
+    JWT_SECRET_KEY: str = "CHANGE_ME_TO_RANDOM_SECRET"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_EXPIRE_MINUTES: int = 30
+    JWT_REFRESH_EXPIRE_DAYS: int = 14
+
+    # --- OAuth ---
+    KAKAO_CLIENT_ID: str = ""
+    KAKAO_CLIENT_SECRET: str = ""
+    KAKAO_REDIRECT_URI: str = ""
+
+    NAVER_CLIENT_ID: str = ""
+    NAVER_CLIENT_SECRET: str = ""
+    NAVER_REDIRECT_URI: str = ""
+
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = ""
+
+    # --- LLM / Embedding ---
+    OPENAI_API_KEY: str = ""
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
+
+    # --- 외부 데이터 API ---
+    NAVER_NEWS_API_CLIENT_ID: str = ""
+    NAVER_NEWS_API_CLIENT_SECRET: str = ""
+    STOCK_PRICE_API_KEY: str = ""
+    MAP_DIRECTIONS_API_KEY: str = ""
+    WEATHER_API_KEY: str = ""
+
+    # --- 게스트(비로그인) ---
+    GUEST_SESSION_TTL_HOURS: int = 24
+    GUEST_SESSION_HEADER_NAME: str = "X-Guest-Session-Id"
+
+    # --- RAG ---
+    NEWS_CLUSTER_SIMILARITY_THRESHOLD: float = 0.85
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()
