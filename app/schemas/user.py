@@ -10,9 +10,7 @@ class UserProfileResponse(BaseModel):
     id: int
     email: str | None = None
     nickname: str
-    provider: str
     profile_image_url: str | None = None
-    created_at: datetime
 
 
 class UserProfileUpdateRequest(BaseModel):

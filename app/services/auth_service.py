@@ -1,34 +1,53 @@
 """
 인증 비즈니스 로직.
-app/routers/auth.py 에서 호출되는 함수들의 뼈대.
-TODO 주석에 구현 방향을 적어두었다.
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.core.security import create_access_token, create_refresh_token
+from app.external import oauth_client
 from app.models.user import User
+from app.repositories import user_repo
 
 
-async def handle_oauth_callback(provider: str, code: str, db: AsyncSession) -> tuple[User, bool]:
+async def handle_oauth_callback(
+    provider: str, code: str, db: AsyncSession
+) -> tuple[User, bool]:
     """
     소셜 로그인 콜백 처리.
     Returns: (user, is_new_user)
-
-    TODO(구현 필요):
-    1. app/external/oauth_client.py 에서 provider별 토큰 교환 함수 호출
-    2. 교환받은 access_token으로 provider의 사용자 정보 API 호출 (email, nickname, profile_image)
-    3. User.provider == provider AND User.provider_id == 받아온 id 로 기존 유저 조회
-    4. 없으면 신규 User 생성 (is_new_user=True), 있으면 last_login_at 갱신 (is_new_user=False)
-    5. db.commit() 후 (user, is_new_user) 반환
     """
-    raise NotImplementedError
+    access_token = await oauth_client.exchange_code_for_token(provider, code)
+    info = await oauth_client.fetch_user_info(provider, access_token)
+
+    user = await user_repo.get_by_provider(provider, info["provider_id"], db)
+
+    if user is None:
+        user = await user_repo.create_user(
+            provider=provider,
+            provider_id=info["provider_id"],
+            nickname=info["nickname"],
+            email=info.get("email"),
+            profile_image_url=info.get("profile_image_url"),
+            db=db,
+        )
+        is_new_user = True
+    else:
+        await user_repo.update_last_login(user, db)
+        is_new_user = False
+
+    await db.commit()
+    await db.refresh(user)
+    return user, is_new_user
 
 
-async def issue_tokens(user: User) -> dict:
-    """
-    user에 대해 access_token + refresh_token 발급.
-
-    TODO(구현 필요):
-    - app.core.security.create_access_token / create_refresh_token 사용
-    - refresh_token을 DB 또는 Redis에 저장해 추후 무효화(로그아웃) 가능하게 할지 결정
-    """
-    raise NotImplementedError
+def issue_tokens(user: User) -> dict:
+    """access_token + refresh_token 발급."""
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "Bearer",
+        "expires_in": settings.JWT_ACCESS_EXPIRE_MINUTES * 60,
+    }

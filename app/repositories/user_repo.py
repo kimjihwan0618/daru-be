@@ -1,6 +1,9 @@
 """
 User 관련 DB 접근 캡슐화.
 """
+from datetime import datetime
+
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -19,20 +22,43 @@ async def get_by_id(user_id: int, db: AsyncSession) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def create_user(
+    provider: str,
+    provider_id: str,
+    nickname: str,
+    email: str | None,
+    profile_image_url: str | None,
+    db: AsyncSession,
+) -> User:
+    user = User(
+        provider=provider,
+        provider_id=provider_id,
+        nickname=nickname,
+        email=email,
+        profile_image_url=profile_image_url,
+        last_login_at=datetime.utcnow(),
+    )
+    db.add(user)
+    await db.flush()  # id 발급
+    return user
+
+
+async def update_last_login(user: User, db: AsyncSession) -> None:
+    user.last_login_at = datetime.utcnow()
+    db.add(user)
+
+
+async def delete_user(user_id: int, db: AsyncSession) -> None:
+    await db.execute(delete(User).where(User.id == user_id))
+
+
 async def list_user_interests(user_id: int, db: AsyncSession) -> list[UserInterest]:
     result = await db.execute(select(UserInterest).where(UserInterest.user_id == user_id))
     return list(result.scalars().all())
 
 
 async def list_guest_interests(session_token: str, db: AsyncSession) -> list[GuestInterest]:
-    """
-    TODO(구현 필요): expires_at > now() 조건 추가 (만료된 항목 제외)
-    """
     result = await db.execute(
         select(GuestInterest).where(GuestInterest.session_token == session_token)
     )
     return list(result.scalars().all())
-
-
-# TODO(구현 필요): create_user, update_last_login, create_user_interest,
-# create_guest_interest, delete_interest 등 나머지 CRUD 함수 추가

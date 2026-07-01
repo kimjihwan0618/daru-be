@@ -1,0 +1,68 @@
+"""
+교통 경로 관련 DB 접근.
+"""
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+
+from app.models.commute import CommuteQuery, CommuteRoute
+
+
+async def list_routes(user_id: int, db: AsyncSession) -> list[CommuteRoute]:
+    result = await db.execute(select(CommuteRoute).where(CommuteRoute.user_id == user_id))
+    return list(result.scalars().all())
+
+
+async def get_route(route_id: int, db: AsyncSession) -> CommuteRoute | None:
+    result = await db.execute(select(CommuteRoute).where(CommuteRoute.id == route_id))
+    return result.scalar_one_or_none()
+
+
+async def create_route(user_id: int, label: str, address: str, lat: float, lng: float, db: AsyncSession) -> CommuteRoute:
+    route = CommuteRoute(
+        user_id=user_id,
+        label=label,
+        address=address,
+        latitude=lat,
+        longitude=lng,
+    )
+    db.add(route)
+    await db.flush()
+    return route
+
+
+async def update_route(route: CommuteRoute, label: str, address: str, lat: float, lng: float, db: AsyncSession) -> CommuteRoute:
+    route.label = label
+    route.address = address
+    route.latitude = lat
+    route.longitude = lng
+    db.add(route)
+    return route
+
+
+async def delete_route(route_id: int, db: AsyncSession) -> None:
+    await db.execute(delete(CommuteRoute).where(CommuteRoute.id == route_id))
+
+
+async def save_query(
+    user_id: int | None,
+    origin_address: str, destination_address: str,
+    origin_lat: float, origin_lng: float,
+    dest_lat: float, dest_lng: float,
+    estimated_minutes: int, delay_minutes: int,
+    db: AsyncSession,
+) -> CommuteQuery:
+    query = CommuteQuery(
+        user_id=user_id,
+        origin_address=origin_address,
+        destination_address=destination_address,
+        origin_lat=origin_lat,
+        origin_lng=origin_lng,
+        dest_lat=dest_lat,
+        dest_lng=dest_lng,
+        estimated_minutes=estimated_minutes,
+        delay_minutes=delay_minutes,
+    )
+    db.add(query)
+    await db.flush()
+    return query

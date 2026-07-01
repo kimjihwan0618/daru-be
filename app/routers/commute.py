@@ -13,6 +13,7 @@ from app.schemas.commute import (
     CommuteRouteResponse,
 )
 from app.schemas.common import ApiResponse
+from app.services import commute_service
 
 router = APIRouter(tags=["commute"])
 
@@ -24,15 +25,16 @@ async def check_commute(
     guest_session_id: str = Depends(get_guest_session_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """출발지·도착지 교통 확인. 인증: Optional.
-    use_default=True면 로그인 사용자의 등록된 집/회사 경로를 사용.
-    """
-    # TODO(구현 필요): app/services/commute_service.py
-    # 1. use_default=True && current_user 있으면 CommuteRoute(HOME/WORK) 조회해 좌표 사용
-    # 2. 아니면 body의 주소를 geocoding (app/external/map_directions_client.py)
-    # 3. 길찾기 API 호출 -> 소요시간/지연시간/추천 출발시간 계산
-    # 4. CommuteQuery row 저장 (로그/통계용, user_id는 nullable)
-    raise NotImplementedError
+    """출발지·도착지 교통 확인. 인증: Optional."""
+    user_id = current_user.id if current_user else None
+    result = await commute_service.check_commute(
+        user_id=user_id,
+        use_default=body.use_default,
+        origin_address=body.origin_address,
+        destination_address=body.destination_address,
+        db=db,
+    )
+    return ApiResponse(success=True, data=result)
 
 
 @router.get("/users/me/commute-routes", response_model=ApiResponse[list[CommuteRouteResponse]])
@@ -41,8 +43,20 @@ async def list_commute_routes(
     db: AsyncSession = Depends(get_db),
 ):
     """등록된 집/회사 경로 목록. 인증: Required."""
-    # TODO(구현 필요): CommuteRoute.user_id == current_user.id 조회
-    raise NotImplementedError
+    routes = await commute_service.list_routes(current_user.id, db)
+    return ApiResponse(
+        success=True,
+        data=[
+            CommuteRouteResponse(
+                id=r.id,
+                label=r.label,
+                address=r.address,
+                latitude=r.latitude,
+                longitude=r.longitude,
+            )
+            for r in routes
+        ],
+    )
 
 
 @router.post("/users/me/commute-routes", response_model=ApiResponse[CommuteRouteResponse])
@@ -52,8 +66,24 @@ async def create_commute_route(
     db: AsyncSession = Depends(get_db),
 ):
     """집/회사 주소 등록. 인증: Required."""
-    # TODO(구현 필요): label(HOME/WORK) 검증 + CommuteRoute insert
-    raise NotImplementedError
+    route = await commute_service.create_route(
+        user_id=current_user.id,
+        label=body.label,
+        address=body.address,
+        lat=body.latitude,
+        lng=body.longitude,
+        db=db,
+    )
+    return ApiResponse(
+        success=True,
+        data=CommuteRouteResponse(
+            id=route.id,
+            label=route.label,
+            address=route.address,
+            latitude=route.latitude,
+            longitude=route.longitude,
+        ),
+    )
 
 
 @router.put("/users/me/commute-routes/{route_id}", response_model=ApiResponse[CommuteRouteResponse])
@@ -64,8 +94,25 @@ async def update_commute_route(
     db: AsyncSession = Depends(get_db),
 ):
     """등록 경로 수정. 인증: Required."""
-    # TODO(구현 필요): route 소유자 확인(403) 후 업데이트
-    raise NotImplementedError
+    route = await commute_service.update_route(
+        route_id=route_id,
+        user_id=current_user.id,
+        label=body.label,
+        address=body.address,
+        lat=body.latitude,
+        lng=body.longitude,
+        db=db,
+    )
+    return ApiResponse(
+        success=True,
+        data=CommuteRouteResponse(
+            id=route.id,
+            label=route.label,
+            address=route.address,
+            latitude=route.latitude,
+            longitude=route.longitude,
+        ),
+    )
 
 
 @router.delete("/users/me/commute-routes/{route_id}", response_model=ApiResponse[None])
@@ -75,5 +122,5 @@ async def delete_commute_route(
     db: AsyncSession = Depends(get_db),
 ):
     """등록 경로 삭제. 인증: Required."""
-    # TODO(구현 필요): route 소유자 확인(403) 후 삭제
-    raise NotImplementedError
+    await commute_service.delete_route(route_id, current_user.id, db)
+    return ApiResponse(success=True, data=None)
