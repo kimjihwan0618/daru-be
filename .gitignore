@@ -1,0 +1,41 @@
+# ===== 민감한 정보 / 환경변수 =====
+.env
+.env.*
+!.env.example
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ===== 가상환경 =====
+.venv/
+venv/
+env/
+
+# ===== DB =====
+*.db
+*.sqlite
+*.sqlite3
+
+# ===== 테스트 / 커버리지 =====
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===== 타입체커 / 린터 캐시 =====
+.mypy_cache/
+.ruff_cache/
+
+# ===== IDE / OS =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ===== 로그 =====
+*.log
