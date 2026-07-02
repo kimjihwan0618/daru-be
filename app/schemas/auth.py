@@ -12,6 +12,17 @@ class OAuthCallbackRequest(BaseModel):
     code: str
 
 
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    nickname: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 class UserSummary(BaseModel):
     id: int
     nickname: str

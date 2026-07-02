@@ -11,9 +11,11 @@ from app.models.user import User
 from app.repositories import user_repo
 from app.schemas.auth import (
     AccessTokenResponse,
+    LoginRequest,
     LoginUrlResponse,
     OAuthCallbackRequest,
     RefreshTokenRequest,
+    RegisterRequest,
     TokenResponse,
     UserSummary,
 )
@@ -52,6 +54,46 @@ async def oauth_callback(
         data=TokenResponse(
             **tokens,
             is_new_user=is_new_user,
+            user=UserSummary(
+                id=user.id,
+                nickname=user.nickname,
+                profile_image_url=user.profile_image_url,
+            ),
+        ),
+    )
+
+
+@router.post("/register", response_model=ApiResponse[TokenResponse])
+async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """이메일/비밀번호 회원가입 → 로그인 + JWT 발급. 인증: Public."""
+    user, is_new_user = await auth_service.register_local_user(body.email, body.password, body.nickname, db)
+    tokens = auth_service.issue_tokens(user)
+
+    return ApiResponse(
+        success=True,
+        data=TokenResponse(
+            **tokens,
+            is_new_user=is_new_user,
+            user=UserSummary(
+                id=user.id,
+                nickname=user.nickname,
+                profile_image_url=user.profile_image_url,
+            ),
+        ),
+    )
+
+
+@router.post("/login", response_model=ApiResponse[TokenResponse])
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """이메일/비밀번호 로그인. 인증: Public."""
+    user = await auth_service.login_local_user(body.email, body.password, db)
+    tokens = auth_service.issue_tokens(user)
+
+    return ApiResponse(
+        success=True,
+        data=TokenResponse(
+            **tokens,
+            is_new_user=False,
             user=UserSummary(
                 id=user.id,
                 nickname=user.nickname,

@@ -22,6 +22,30 @@ async def get_by_id(user_id: int, db: AsyncSession) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_by_email(email: str, db: AsyncSession) -> User | None:
+    result = await db.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
+
+
+async def create_local_user(
+    email: str,
+    password_hash: str,
+    nickname: str,
+    db: AsyncSession,
+) -> User:
+    user = User(
+        provider="local",
+        provider_id=email,
+        email=email,
+        nickname=nickname,
+        password_hash=password_hash,
+        last_login_at=datetime.utcnow(),
+    )
+    db.add(user)
+    await db.flush()  # id 발급
+    return user
+
+
 async def create_user(
     provider: str,
     provider_id: str,

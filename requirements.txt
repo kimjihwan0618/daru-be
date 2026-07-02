@@ -16,6 +16,7 @@ pydantic-settings==2.5.2
 # --- 인증 ---
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1  # passlib 1.7.4가 bcrypt>=4.1과 호환되지 않는 알려진 버그 회피용 고정
 
 # --- 외부 API 호출 ---
 httpx==0.27.2

@@ -4,10 +4,45 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import create_access_token, create_refresh_token
+from app.core.exceptions import ConflictException, UnauthorizedException
+from app.core.security import create_access_token, create_refresh_token, hash_password, verify_password
 from app.external import oauth_client
 from app.models.user import User
 from app.repositories import user_repo
+
+
+async def register_local_user(
+    email: str, password: str, nickname: str, db: AsyncSession
+) -> tuple[User, bool]:
+    """
+    이메일/비밀번호 회원가입.
+    Returns: (user, is_new_user) - OAuth 콜백과 동일한 반환 형태로 라우터에서 재사용.
+    """
+    existing = await user_repo.get_by_email(email, db)
+    if existing is not None:
+        raise ConflictException(message="이미 가입된 이메일입니다.")
+
+    user = await user_repo.create_local_user(
+        email=email,
+        password_hash=hash_password(password),
+        nickname=nickname,
+        db=db,
+    )
+    await db.commit()
+    await db.refresh(user)
+    return user, True
+
+
+async def login_local_user(email: str, password: str, db: AsyncSession) -> User:
+    """이메일/비밀번호 로그인."""
+    user = await user_repo.get_by_email(email, db)
+    if user is None or user.password_hash is None or not verify_password(password, user.password_hash):
+        raise UnauthorizedException(message="이메일 또는 비밀번호가 올바르지 않습니다.", code="INVALID_CREDENTIALS")
+
+    await user_repo.update_last_login(user, db)
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 
 async def handle_oauth_callback(
