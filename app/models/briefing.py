@@ -3,7 +3,7 @@
 """
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, DateTime, ForeignKey, String, Text
+from sqlalchemy import ARRAY, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -19,8 +19,8 @@ class DailyBriefing(Base):
     time_slot: Mapped[str] = mapped_column(String(10))  # MORNING / EVENING
     summary_text: Mapped[str] = mapped_column(Text)
 
-    # issue_clusters.id 목록. SQLite는 array 미지원 -> JSON 직렬화.
-    top_issue_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    # issue_clusters.id 목록.
+    top_issue_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list)
 
     generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -37,7 +37,7 @@ class UserBriefing(Base):
     briefing_date: Mapped[date] = mapped_column(Date, index=True)
     time_slot: Mapped[str] = mapped_column(String(10))
     personalized_text: Mapped[str] = mapped_column(Text)
-    matched_issue_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    matched_issue_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list)
     generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # TODO(구현 필요): (user_id, briefing_date, time_slot) unique 제약

@@ -1,6 +1,7 @@
 """
 인증 비즈니스 로직.
 """
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -28,7 +29,12 @@ async def register_local_user(
         nickname=nickname,
         db=db,
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 동시 요청으로 같은 이메일이 먼저 커밋된 경우 (check-then-insert race)
+        await db.rollback()
+        raise ConflictException(message="이미 가입된 이메일입니다.")
     await db.refresh(user)
     return user, True
 
@@ -67,13 +73,31 @@ async def handle_oauth_callback(
             db=db,
         )
         is_new_user = True
+        try:
+            await db.commit()
+        except IntegrityError:
+            # 동시 콜백 요청으로 같은 소셜 계정이 먼저 커밋된 경우 (check-then-insert race)
+            # 신규 가입이 아니라 로그인으로 취급하고 기존 유저를 재조회한다.
+            await db.rollback()
+            user = await user_repo.get_by_provider(provider, info["provider_id"], db)
+            if user is None:
+                raise
+            await user_repo.update_last_login(user, db)
+            await db.commit()
+            is_new_user = False
     else:
         await user_repo.update_last_login(user, db)
         is_new_user = False
+        await db.commit()
 
-    await db.commit()
     await db.refresh(user)
     return user, is_new_user
+
+
+async def withdraw_user(user_id: int, db: AsyncSession) -> None:
+    """회원 탈퇴. FK cascade로 연관 데이터(user_interests 등)도 함께 삭제된다."""
+    await user_repo.delete_user(user_id, db)
+    await db.commit()
 
 
 def issue_tokens(user: User) -> dict:

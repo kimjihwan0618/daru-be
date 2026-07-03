@@ -2,12 +2,11 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 
-# --- DB (SQLite 우선 → 추후 PostgreSQL 전환) ---
+# --- DB (PostgreSQL + pgvector) ---
 sqlalchemy[asyncio]==2.0.35
-aiosqlite==0.20.0
 alembic==1.13.3
 asyncpg==0.31.0
-# pgvector==0.3.4  # pgvector 익스텐션 설치 후 활성화
+pgvector==0.3.4
 
 # --- 설정/검증 ---
 pydantic==2.9.2

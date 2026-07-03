@@ -17,9 +17,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # --- Database ---
-    # 현재 SQLite, 추후 DATABASE_URL만 PostgreSQL DSN으로 바꾸면 전환 가능
-    # (단, pgvector 관련 모델/쿼리는 별도 분기 필요 - app/models/news.py 주석 참고)
-    DATABASE_URL: str = "sqlite+aiosqlite:///./daru.db"
+    DATABASE_URL: str = "postgresql+asyncpg://daru_user:daru_pass@localhost:5432/daru"
 
     # --- Redis ---
     REDIS_URL: str = "redis://localhost:6379/0"

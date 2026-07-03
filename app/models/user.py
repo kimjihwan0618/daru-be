@@ -4,7 +4,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -12,6 +12,7 @@ from app.db.base import Base
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("provider", "provider_id", name="uq_users_provider_provider_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
@@ -27,13 +28,12 @@ class User(Base):
 
     interests: Mapped[list["UserInterest"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
-    # TODO(구현 필요): provider + provider_id 복합 unique 제약 추가 (Alembic migration)
-
 
 class UserInterest(Base):
     """로그인 사용자의 영구 관심 키워드/종목. 설계서 6.7 /interests 대응."""
 
     __tablename__ = "user_interests"
+    __table_args__ = (UniqueConstraint("user_id", "type", "value", name="uq_user_interests_user_id_type_value"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
@@ -42,8 +42,6 @@ class UserInterest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship(back_populates="interests")
-
-    # TODO(구현 필요): (user_id, type, value) unique 제약 - 중복 등록 방지
 
 
 class GuestInterest(Base):

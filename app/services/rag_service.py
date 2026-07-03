@@ -3,25 +3,9 @@ RAG 핵심 로직. 설계서 7장 참고.
 이 프로젝트의 학습 목표(RAG/임베딩 활용)가 집약되는 모듈.
 
 흐름: Retrieval(유사 이슈 검색) -> Augmentation(프롬프트 조립) -> Generation(LLM 호출)
+유사도 검색은 pgvector의 `<=>` 연산자로 DB에 위임한다 (app/models/news.py 참고).
 """
 from sqlalchemy.ext.asyncio import AsyncSession
-
-
-def cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
-    """
-    코사인 유사도 계산.
-
-    NOTE: 현재 SQLite 단계에서는 DB가 벡터 연산을 못 하므로
-    애플리케이션 레벨(이 함수)에서 직접 계산해야 한다.
-    PostgreSQL+pgvector 전환 후에는 SQL의 `<=>` 연산자로 대체 가능
-    (app/models/news.py 모듈 docstring의 전환 가이드 참고).
-
-    TODO(구현 필요): numpy 사용 권장
-        import numpy as np
-        a, b = np.array(vec_a), np.array(vec_b)
-        return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
-    """
-    raise NotImplementedError
 
 
 async def embed_text(text: str) -> list[float]:
@@ -42,15 +26,12 @@ async def find_similar_issue_clusters(
     """
     쿼리 임베딩과 가장 유사한 IssueCluster id 목록 반환.
 
-    TODO(구현 필요) - SQLite 단계:
-    1. is_active=True인 IssueCluster 전체의 centroid_embedding(NewsEmbedding) 로드
-    2. 각각에 대해 cosine_similarity() 계산 (전체 스캔 - 데이터 적을 때만 허용)
-    3. 유사도 내림차순 top_k개의 IssueCluster.id 반환
-
-    TODO(구현 필요) - PostgreSQL+pgvector 전환 후:
-    SQL로 대체:
-        SELECT id FROM issue_clusters
-        ORDER BY centroid_embedding <=> :query_embedding
+    TODO(구현 필요): is_active=True인 IssueCluster를 centroid_embedding(NewsEmbedding.embedding)
+    기준 pgvector 코사인 거리 순으로 정렬해 top_k개 조회.
+        SELECT ic.id FROM issue_clusters ic
+        JOIN news_embeddings ne ON ne.id = ic.centroid_embedding_id
+        WHERE ic.is_active = true
+        ORDER BY ne.embedding <=> :query_embedding
         LIMIT :top_k
     """
     raise NotImplementedError

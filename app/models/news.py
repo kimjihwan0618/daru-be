@@ -1,23 +1,15 @@
 """
 뉴스/이슈 관련 모델. 설계서 4.1, 4.2 - raw_articles / issue_clusters / news_embeddings 대응.
 
-=== SQLite ↔ PostgreSQL(pgvector) 전환 가이드 ===
-SQLite는 벡터 타입을 지원하지 않으므로, 현재 단계(구조 검증용)에서는
-NewsEmbedding.embedding 컬럼을 JSON(파이썬 list[float] 직렬화)으로 둔다.
-즉, 지금은 "임베딩을 저장은 하지만 DB 레벨 벡터 검색은 불가능한 상태"이고,
-유사도 계산은 애플리케이션 코드(numpy/직접 계산)에서 해야 한다.
-
-PostgreSQL + pgvector로 전환 시:
-  1. `from pgvector.sqlalchemy import Vector` import
-  2. embedding 컬럼 타입을 `Mapped[list[float]] = mapped_column(Vector(1536))` 로 교체
-  3. Alembic migration에서 `CREATE EXTENSION IF NOT EXISTS vector;` 실행
-  4. `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)` 인덱스 추가
-  5. services/news_dedup_service.py 의 유사도 계산을 SQL(`embedding <=> :query`)으로 교체
-     (현재는 TODO로 애플리케이션 레벨 코사인 유사도 계산을 가정)
+임베딩 컬럼은 pgvector의 Vector(1536) 타입을 사용한다. 유사도 검색은
+`embedding <=> :query` 연산자로 DB에 위임한다 (app/services/rag_service.py 참고).
+`CREATE EXTENSION IF NOT EXISTS vector;`가 선행되어야 하며, HNSW 인덱스는
+Alembic migration에서 `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)`로 추가한다.
 """
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import ARRAY, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -39,9 +31,8 @@ class IssueCluster(Base):
         ForeignKey("news_embeddings.id"), nullable=True
     )
 
-    # 관련 종목 코드 목록. SQLite에는 array 타입이 없어 JSON으로 직렬화.
-    # PostgreSQL 전환 시 ARRAY(String) 또는 별도 매핑 테이블로 교체 가능.
-    related_stock_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # 관련 종목 코드 목록.
+    related_stock_codes: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
 
     is_active: Mapped[bool] = mapped_column(default=True)  # 당일 브리핑 노출 여부
 
@@ -75,17 +66,13 @@ class RawArticle(Base):
 
 
 class NewsEmbedding(Base):
-    """기사 본문 임베딩. 설계서 4.2 - news_embeddings 대응.
-
-    embedding 컬럼: 현재 SQLite 단계는 JSON(list[float]) 직렬화.
-    PostgreSQL 전환 시 Vector(1536)으로 교체 (위 모듈 docstring 참고).
-    """
+    """기사 본문 임베딩. 설계서 4.2 - news_embeddings 대응."""
 
     __tablename__ = "news_embeddings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     article_id: Mapped[int] = mapped_column(ForeignKey("raw_articles.id", ondelete="CASCADE"))
-    embedding: Mapped[list[float]] = mapped_column(JSON)  # TODO: pgvector 전환 시 Vector(1536)
+    embedding: Mapped[list[float]] = mapped_column(Vector(1536))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # TODO(구현 필요): article_id unique 제약 (기사 1건당 임베딩 1개)
@@ -100,7 +87,7 @@ class InterestEmbedding(Base):
     owner_type: Mapped[str] = mapped_column(String(10))  # USER / GUEST
     owner_ref_id: Mapped[str] = mapped_column(String(64))  # user_id(str) 또는 guest session_token
     keyword: Mapped[str] = mapped_column(String(100))
-    embedding: Mapped[list[float]] = mapped_column(JSON)  # TODO: pgvector 전환 시 Vector(1536)
+    embedding: Mapped[list[float]] = mapped_column(Vector(1536))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # TODO(구현 필요): (owner_type, owner_ref_id, keyword) unique 제약

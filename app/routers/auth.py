@@ -147,6 +147,5 @@ async def withdraw(
     db: AsyncSession = Depends(get_db),
 ):
     """회원 탈퇴. 인증: Required."""
-    await user_repo.delete_user(current_user.id, db)
-    await db.commit()
+    await auth_service.withdraw_user(current_user.id, db)
     return ApiResponse(success=True, data=None)
