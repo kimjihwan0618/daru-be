@@ -13,6 +13,7 @@ from app.schemas.auth import (
     AccessTokenResponse,
     LoginRequest,
     LoginUrlResponse,
+    LogoutRequest,
     OAuthCallbackRequest,
     RefreshTokenRequest,
     RegisterRequest,
@@ -47,7 +48,7 @@ async def oauth_callback(
         raise InvalidRequestException(f"지원하지 않는 provider입니다: {provider}")
 
     user, is_new_user = await auth_service.handle_oauth_callback(provider, body.code, db)
-    tokens = auth_service.issue_tokens(user)
+    tokens = await auth_service.issue_tokens(user)
 
     return ApiResponse(
         success=True,
@@ -67,7 +68,7 @@ async def oauth_callback(
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """이메일/비밀번호 회원가입 → 로그인 + JWT 발급. 인증: Public."""
     user, is_new_user = await auth_service.register_local_user(body.email, body.password, body.nickname, db)
-    tokens = auth_service.issue_tokens(user)
+    tokens = await auth_service.issue_tokens(user)
 
     return ApiResponse(
         success=True,
@@ -87,7 +88,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     """이메일/비밀번호 로그인. 인증: Public."""
     user = await auth_service.login_local_user(body.email, body.password, db)
-    tokens = auth_service.issue_tokens(user)
+    tokens = await auth_service.issue_tokens(user)
 
     return ApiResponse(
         success=True,
@@ -115,6 +116,10 @@ async def refresh_access_token(
         raise UnauthorizedException(message="유효하지 않은 refresh token입니다.", code="INVALID_REFRESH_TOKEN")
 
     user_id = payload.get("sub")
+    jti = payload.get("jti")
+    if not jti or not await auth_service.verify_refresh_session(int(user_id), jti):
+        raise UnauthorizedException(message="로그아웃되었거나 만료된 세션입니다.", code="INVALID_REFRESH_TOKEN")
+
     user = await user_repo.get_by_id(int(user_id), db)
     if user is None:
         raise UnauthorizedException(message="존재하지 않는 사용자입니다.", code="INVALID_REFRESH_TOKEN")
@@ -132,12 +137,12 @@ async def refresh_access_token(
 
 
 @router.post("/logout", response_model=ApiResponse[None])
-async def logout(current_user: User = Depends(get_current_user)):
-    """
-    로그아웃. 인증: Required.
-    현재는 클라이언트 측 토큰 폐기 방식으로 동작.
-    refresh_token 서버 측 무효화는 Redis 도입 후 구현 예정.
-    """
+async def logout(
+    body: LogoutRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """로그아웃. 인증: Required. 요청한 기기(refresh_token)의 세션만 Redis에서 무효화하고 다른 기기 로그인은 유지된다."""
+    await auth_service.logout(current_user.id, body.refresh_token)
     return ApiResponse(success=True, data=None)
 
 

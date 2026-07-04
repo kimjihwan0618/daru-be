@@ -1,15 +1,23 @@
 """
 인증 비즈니스 로직.
 """
+from datetime import timedelta
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import ConflictException, UnauthorizedException
-from app.core.security import create_access_token, create_refresh_token, hash_password, verify_password
+from app.core.redis import redis_client
+from app.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 from app.external import oauth_client
 from app.models.user import User
 from app.repositories import user_repo
+
+
+def _refresh_session_key(user_id: int, jti: str) -> str:
+    """기기(세션) 단위 refresh token 키. 로그인 시 등록, 로그아웃/탈퇴 시 삭제."""
+    return f"refresh_session:{user_id}:{jti}"
 
 
 async def register_local_user(
@@ -95,18 +103,44 @@ async def handle_oauth_callback(
 
 
 async def withdraw_user(user_id: int, db: AsyncSession) -> None:
-    """회원 탈퇴. FK cascade로 연관 데이터(user_interests 등)도 함께 삭제된다."""
+    """회원 탈퇴. FK cascade로 연관 데이터(user_interests 등)도 함께 삭제되고, 모든 기기의 로그인 세션도 무효화한다."""
     await user_repo.delete_user(user_id, db)
     await db.commit()
 
+    async for key in redis_client.scan_iter(match=_refresh_session_key(user_id, "*")):
+        await redis_client.delete(key)
 
-def issue_tokens(user: User) -> dict:
-    """access_token + refresh_token 발급."""
+
+async def issue_tokens(user: User) -> dict:
+    """access_token + refresh_token 발급. refresh_token은 기기(세션) 단위로 Redis에 등록한다."""
     access_token = create_access_token(user.id)
-    refresh_token = create_refresh_token(user.id)
+    refresh_token, jti = create_refresh_token(user.id)
+
+    await redis_client.set(
+        _refresh_session_key(user.id, jti),
+        "1",
+        ex=timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS),
+    )
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "Bearer",
         "expires_in": settings.JWT_ACCESS_EXPIRE_MINUTES * 60,
     }
+
+
+async def verify_refresh_session(user_id: int, jti: str) -> bool:
+    """refresh token의 세션이 아직 Redis에 살아있는지 확인 (로그아웃/탈퇴 시 삭제됨)."""
+    return await redis_client.exists(_refresh_session_key(user_id, jti)) == 1
+
+
+async def logout(user_id: int, refresh_token: str) -> None:
+    """로그아웃. 요청한 기기(refresh_token)의 세션만 무효화하고 다른 기기 세션은 유지한다."""
+    payload = decode_token(refresh_token)
+    if not payload or payload.get("type") != "refresh" or int(payload.get("sub", -1)) != user_id:
+        raise UnauthorizedException(message="유효하지 않은 refresh token입니다.", code="INVALID_REFRESH_TOKEN")
+
+    jti = payload.get("jti")
+    if jti:
+        await redis_client.delete(_refresh_session_key(user_id, jti))

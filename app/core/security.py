@@ -3,12 +3,10 @@ JWT access/refresh 토큰 발급·검증 유틸.
 
 설계서 6.1 인증 흐름 참고:
 - access_token: 단기(기본 30분), 모든 Required/Optional Auth 요청에 사용
-- refresh_token: 장기(기본 14일), /auth/refresh 에서만 사용
-
-TODO(구현 필요):
-- refresh_token 화이트리스트/블랙리스트 관리 (DB or Redis) - 로그아웃/탈퇴 시 무효화용
-- 토큰 payload에 jti(토큰 고유 id) 추가해 회전(rotation) 및 재사용 탐지 구현
+- refresh_token: 장기(기본 14일), /auth/refresh 에서만 사용. jti(세션 id)를 포함하며
+  Redis에 기기(세션) 단위로 등록/삭제된다 - app/services/auth_service.py 참고.
 """
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -51,12 +49,16 @@ def create_access_token(user_id: int) -> str:
     )
 
 
-def create_refresh_token(user_id: int) -> str:
-    return _create_token(
+def create_refresh_token(user_id: int) -> tuple[str, str]:
+    """refresh_token과 jti(세션 식별자)를 함께 반환. jti는 Redis 세션 키로 사용된다."""
+    jti = uuid.uuid4().hex
+    token = _create_token(
         subject=str(user_id),
         expires_delta=timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS),
         token_type="refresh",
+        extra_claims={"jti": jti},
     )
+    return token, jti
 
 
 def decode_token(token: str) -> dict[str, Any] | None:
