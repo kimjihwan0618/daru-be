@@ -69,6 +69,17 @@ async def handle_oauth_callback(
     access_token = await oauth_client.exchange_code_for_token(provider, code)
     info = await oauth_client.fetch_user_info(provider, access_token)
 
+    print("-----------------")
+    print("-----------------")
+    print("-----------------")
+    print("-----------------")
+    print(info)
+    print("-----------------")
+    print("-----------------")
+    print("-----------------")
+    print("-----------------")
+    print("-----------------")
+
     user = await user_repo.get_by_provider(provider, info["provider_id"], db)
 
     if user is None:

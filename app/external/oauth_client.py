@@ -31,7 +31,7 @@ def build_authorize_url(provider: str) -> str:
             f"?client_id={settings.NAVER_CLIENT_ID}"
             f"&redirect_uri={settings.NAVER_REDIRECT_URI}"
             "&response_type=code"
-            "&state=daru"
+            "&state=gwiteem"
         )
     # google
     return (
