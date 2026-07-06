@@ -6,6 +6,7 @@ JWT access/refresh 토큰 발급·검증 유틸.
 - refresh_token: 장기(기본 14일), /auth/refresh 에서만 사용. jti(세션 id)를 포함하며
   Redis에 기기(세션) 단위로 등록/삭제된다 - app/services/auth_service.py 참고.
 """
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -14,8 +15,24 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
+from app.core.exceptions import InvalidRequestException
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+_PASSWORD_SPECIAL_CHARS = r"""!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?"""
+
+
+def validate_password_strength(password: str) -> None:
+    """회원가입/비밀번호 재설정 등 비밀번호를 새로 받는 곳에서 공통으로 쓰는 검증.
+    8~16자, 영문/숫자/특수문자를 모두 포함해야 한다."""
+    if not (8 <= len(password) <=16):
+        raise InvalidRequestException(message="비밀번호는 8자 이상 16자 이하로 입력해주세요.", code="INVALID_PASSWORD")
+    if not re.search(r"[A-Za-z]", password):
+        raise InvalidRequestException(message="비밀번호에 영문자를 포함해주세요.", code="INVALID_PASSWORD")
+    if not re.search(r"\d", password):
+        raise InvalidRequestException(message="비밀번호에 숫자를 포함해주세요.", code="INVALID_PASSWORD")
+    if not re.search(f"[{_PASSWORD_SPECIAL_CHARS}]", password):
+        raise InvalidRequestException(message="비밀번호에 특수문자를 포함해주세요.", code="INVALID_PASSWORD")
 
 
 def hash_password(plain_password: str) -> str:

@@ -18,6 +18,29 @@ class RegisterRequest(BaseModel):
     nickname: str
 
 
+class EmailVerificationSendRequest(BaseModel):
+    email: str
+
+
+class EmailVerificationConfirmRequest(BaseModel):
+    email: str
+    code: str
+
+
+class PasswordResetSendRequest(BaseModel):
+    email: str
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    email: str
+    code: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+    new_password: str
+
+
 class LoginRequest(BaseModel):
     email: str
     password: str

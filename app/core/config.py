@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # --- App ---
-    APP_NAME: str = "DARU"
+    APP_NAME: str = "gwiteem"
     APP_ENV: str = "development"
     DEBUG: bool = True
 
@@ -59,6 +59,14 @@ class Settings(BaseSettings):
 
     # --- RAG ---
     NEWS_CLUSTER_SIMILARITY_THRESHOLD: float = 0.85
+
+    # --- AWS SES (이메일 인증) ---
+    AWS_REGION: str = "ap-northeast-2"
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    SES_SENDER_EMAIL: str = "noreply@gwiteem.com"
+    EMAIL_VERIFICATION_CODE_TTL_MINUTES: int = 5
+    EMAIL_VERIFIED_TTL_MINUTES: int = 30
 
 
 @lru_cache

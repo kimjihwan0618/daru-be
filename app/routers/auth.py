@@ -11,10 +11,15 @@ from app.models.user import User
 from app.repositories import user_repo
 from app.schemas.auth import (
     AccessTokenResponse,
+    EmailVerificationConfirmRequest,
+    EmailVerificationSendRequest,
     LoginRequest,
     LoginUrlResponse,
     LogoutRequest,
     OAuthCallbackRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    PasswordResetSendRequest,
     RefreshTokenRequest,
     RegisterRequest,
     TokenResponse,
@@ -62,6 +67,41 @@ async def oauth_callback(
             ),
         ),
     )
+
+
+@router.post("/email/verification-code", response_model=ApiResponse[None])
+async def send_email_verification_code(body: EmailVerificationSendRequest, db: AsyncSession = Depends(get_db)):
+    """회원가입용 이메일 인증번호 발송. 인증: Public."""
+    await auth_service.send_email_verification_code(body.email, db)
+    return ApiResponse(success=True, data=None)
+
+
+@router.post("/email/verification-code/confirm", response_model=ApiResponse[None])
+async def confirm_email_verification_code(body: EmailVerificationConfirmRequest):
+    """이메일 인증번호 검증. 인증: Public."""
+    await auth_service.verify_email_code(body.email, body.code)
+    return ApiResponse(success=True, data=None)
+
+
+@router.post("/password/reset-code", response_model=ApiResponse[None])
+async def send_password_reset_code(body: PasswordResetSendRequest, db: AsyncSession = Depends(get_db)):
+    """비밀번호 재설정 인증번호 발송. 인증: Public."""
+    await auth_service.send_password_reset_code(body.email, db)
+    return ApiResponse(success=True, data=None)
+
+
+@router.post("/password/reset-code/confirm", response_model=ApiResponse[None])
+async def confirm_password_reset_code(body: PasswordResetConfirmRequest):
+    """비밀번호 재설정 인증번호 검증. 인증: Public."""
+    await auth_service.verify_password_reset_code(body.email, body.code)
+    return ApiResponse(success=True, data=None)
+
+
+@router.post("/password/reset", response_model=ApiResponse[None])
+async def reset_password(body: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
+    """인증번호 검증 통과 후 새 비밀번호로 재설정. 인증: Public."""
+    await auth_service.reset_password(body.email, body.new_password, db)
+    return ApiResponse(success=True, data=None)
 
 
 @router.post("/register", response_model=ApiResponse[TokenResponse])

@@ -1,16 +1,24 @@
 """
 인증 비즈니스 로직.
 """
+import secrets
 from datetime import timedelta
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import ConflictException, UnauthorizedException
+from app.core.exceptions import ConflictException, InvalidRequestException, NotFoundException, UnauthorizedException
 from app.core.redis import redis_client
-from app.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
-from app.external import oauth_client
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    hash_password,
+    validate_password_strength,
+    verify_password,
+)
+from app.external import oauth_client, ses_client
 from app.models.user import User
 from app.repositories import user_repo
 
@@ -18,6 +26,104 @@ from app.repositories import user_repo
 def _refresh_session_key(user_id: int, jti: str) -> str:
     """기기(세션) 단위 refresh token 키. 로그인 시 등록, 로그아웃/탈퇴 시 삭제."""
     return f"refresh_session:{user_id}:{jti}"
+
+
+def _email_verification_code_key(email: str) -> str:
+    """발송한 인증번호를 담아두는 키. TTL 만료 시 재발송 필요."""
+    return f"email_verification_code:{email}"
+
+
+def _email_verified_key(email: str) -> str:
+    """인증번호 검증에 성공했음을 표시하는 키. register 시 확인 후 삭제한다."""
+    return f"email_verified:{email}"
+
+
+def _password_reset_code_key(email: str) -> str:
+    """비밀번호 재설정용으로 발송한 인증번호 키. 회원가입 인증과는 별도 네임스페이스를 쓴다."""
+    return f"password_reset_code:{email}"
+
+
+def _password_reset_verified_key(email: str) -> str:
+    """비밀번호 재설정 인증번호 검증에 성공했음을 표시하는 키. reset 시 확인 후 삭제한다."""
+    return f"password_reset_verified:{email}"
+
+
+async def send_email_verification_code(email: str, db: AsyncSession) -> None:
+    """이메일로 6자리 인증번호를 발송하고 Redis에 TTL과 함께 저장한다."""
+    existing = await user_repo.get_by_email(email, db)
+    if existing is not None:
+        raise ConflictException(message="이미 가입된 이메일입니다.")
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    await redis_client.set(
+        _email_verification_code_key(email),
+        code,
+        ex=timedelta(minutes=settings.EMAIL_VERIFICATION_CODE_TTL_MINUTES),
+    )
+    await ses_client.send_verification_email(email, code)
+
+
+async def verify_email_code(email: str, code: str) -> None:
+    """발송된 인증번호와 일치하는지 확인하고, 맞으면 인증 완료 상태로 표시한다."""
+    stored_code = await redis_client.get(_email_verification_code_key(email))
+    if stored_code is None or stored_code != code:
+        raise InvalidRequestException(message="인증번호가 올바르지 않거나 만료되었습니다.", code="INVALID_VERIFICATION_CODE")
+
+    await redis_client.delete(_email_verification_code_key(email))
+    await redis_client.set(
+        _email_verified_key(email),
+        "1",
+        ex=timedelta(minutes=settings.EMAIL_VERIFIED_TTL_MINUTES),
+    )
+
+
+async def send_password_reset_code(email: str, db: AsyncSession) -> None:
+    """비밀번호 재설정용 인증번호를 발송한다. 이메일/비밀번호로 가입한 계정만 대상으로 한다."""
+    user = await user_repo.get_by_email(email, db)
+    if user is None or user.provider != "local":
+        raise NotFoundException(message="가입된 이메일 계정을 찾을 수 없습니다.")
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    await redis_client.set(
+        _password_reset_code_key(email),
+        code,
+        ex=timedelta(minutes=settings.EMAIL_VERIFICATION_CODE_TTL_MINUTES),
+    )
+    await ses_client.send_password_reset_email(email, code)
+
+
+async def verify_password_reset_code(email: str, code: str) -> None:
+    """비밀번호 재설정 인증번호를 검증하고, 맞으면 새 비밀번호 입력 화면으로 넘어갈 수 있도록 표시한다."""
+    stored_code = await redis_client.get(_password_reset_code_key(email))
+    if stored_code is None or stored_code != code:
+        raise InvalidRequestException(message="인증번호가 올바르지 않거나 만료되었습니다.", code="INVALID_VERIFICATION_CODE")
+
+    await redis_client.delete(_password_reset_code_key(email))
+    await redis_client.set(
+        _password_reset_verified_key(email),
+        "1",
+        ex=timedelta(minutes=settings.EMAIL_VERIFIED_TTL_MINUTES),
+    )
+
+
+async def reset_password(email: str, new_password: str, db: AsyncSession) -> None:
+    """인증번호 검증을 통과한 이메일에 한해 새 비밀번호로 재설정하고, 모든 기기의 로그인 세션을 무효화한다."""
+    if await redis_client.get(_password_reset_verified_key(email)) is None:
+        raise InvalidRequestException(message="이메일 인증이 필요합니다.", code="EMAIL_NOT_VERIFIED")
+
+    validate_password_strength(new_password)
+
+    user = await user_repo.get_by_email(email, db)
+    if user is None or user.provider != "local":
+        raise NotFoundException(message="가입된 이메일 계정을 찾을 수 없습니다.")
+
+    user.password_hash = hash_password(new_password)
+    db.add(user)
+    await db.commit()
+
+    await redis_client.delete(_password_reset_verified_key(email))
+    async for key in redis_client.scan_iter(match=_refresh_session_key(user.id, "*")):
+        await redis_client.delete(key)
 
 
 async def register_local_user(
@@ -30,6 +136,11 @@ async def register_local_user(
     existing = await user_repo.get_by_email(email, db)
     if existing is not None:
         raise ConflictException(message="이미 가입된 이메일입니다.")
+
+    if await redis_client.get(_email_verified_key(email)) is None:
+        raise InvalidRequestException(message="이메일 인증이 필요합니다.", code="EMAIL_NOT_VERIFIED")
+
+    validate_password_strength(password)
 
     user = await user_repo.create_local_user(
         email=email,
@@ -44,6 +155,7 @@ async def register_local_user(
         await db.rollback()
         raise ConflictException(message="이미 가입된 이메일입니다.")
     await db.refresh(user)
+    await redis_client.delete(_email_verified_key(email))
     return user, True
 
 
@@ -68,18 +180,6 @@ async def handle_oauth_callback(
     """
     access_token = await oauth_client.exchange_code_for_token(provider, code)
     info = await oauth_client.fetch_user_info(provider, access_token)
-
-    print("-----------------")
-    print("-----------------")
-    print("-----------------")
-    print("-----------------")
-    print(info)
-    print("-----------------")
-    print("-----------------")
-    print("-----------------")
-    print("-----------------")
-    print("-----------------")
-
     user = await user_repo.get_by_provider(provider, info["provider_id"], db)
 
     if user is None:
