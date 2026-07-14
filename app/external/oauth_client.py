@@ -68,7 +68,7 @@ async def exchange_code_for_token(provider: str, code: str) -> str:
                     "client_secret": settings.NAVER_CLIENT_SECRET,
                     "redirect_uri": settings.NAVER_REDIRECT_URI,
                     "code": code,
-                    "state": "daru",
+                    "state": "gwiteem",
                 },
             )
         else:  # google

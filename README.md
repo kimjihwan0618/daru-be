@@ -1,10 +1,10 @@
-# DARU Backend
+# gwiteem Backend
 
 출퇴근 맞춤 브리핑 서비스 백엔드 (FastAPI + SQLite → PostgreSQL/pgvector 전환 예정)
 
 > 이 저장소는 **전체 엔드포인트 + DB 모델 뼈대**까지 생성된 상태입니다.
 > 비즈니스 로직(서비스/외부 API 연동/RAG)은 각 파일의 `TODO(구현 필요)` 주석을 따라 직접 구현하시면 됩니다.
-> 전체 설계 의도는 `docs/DARU_API_설계서.md` (별도 전달됨)를 참고하세요.
+> 전체 설계 의도는 `docs/gwiteem_API_설계서.md` (별도 전달됨)를 참고하세요.
 
 ---
 

@@ -1,4 +1,4 @@
-# DARU 백엔드 API 설계서
+# gwiteem 백엔드 API 설계서
 
 > 출퇴근 맞춤 브리핑 서비스 — FastAPI + PostgreSQL(pgvector) + RAG
 
@@ -7,7 +7,7 @@
 ## 1. 프로젝트 개요
 
 ### 1.1 서비스 정의
-DARU는 사용자의 출퇴근 시간에 맞춰 **뉴스, 금융, 교통, 날씨**를 하나의 짧은 브리핑으로 압축해주는 서비스다.
+gwiteem은 사용자의 출퇴근 시간에 맞춰 **뉴스, 금융, 교통, 날씨**를 하나의 짧은 브리핑으로 압축해주는 서비스다.
 비로그인 사용자에게는 "오늘의 공통 브리핑"을, 로그인 사용자에게는 **관심 종목·키워드 기반 RAG 개인화 브리핑**을 제공한다.
 
 ### 1.2 기술 스택
@@ -75,7 +75,7 @@ DARU는 사용자의 출퇴근 시간에 맞춰 **뉴스, 금융, 교통, 날씨
 ## 3. 프로젝트 폴더 구조
 
 ```
-DARU/BE/
+gwiteem/BE/
 ├── app/
 │   ├── main.py                      # FastAPI 앱 진입점
 │   ├── core/
@@ -460,7 +460,7 @@ GET /api/v1/news/issues?cursor=eyJpZCI6MTIzfQ&limit=20
 - **설명**: 브리핑 공유 링크 생성
 - **Response 200**
 ```json
-{ "success": true, "data": { "share_url": "https://daru.app/s/4f9a2b", "expires_at": "2026-07-06T00:00:00+09:00" } }
+{ "success": true, "data": { "share_url": "https://gwiteem.com/s/4f9a2b", "expires_at": "2026-07-06T00:00:00+09:00" } }
 ```
 
 #### `GET /briefings/shared/{share_token}`
@@ -864,7 +864,7 @@ Output: { "headline": "...", "summary": "...", "category": "반도체|금리|AI|
 
 ### 10.1 환경변수 (.env.example)
 ```
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/daru
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/gwiteem
 REDIS_URL=redis://localhost:6379/0
 
 OPENAI_API_KEY=sk-...
