@@ -23,6 +23,13 @@ from app.models.user import User
 from app.repositories import user_repo
 
 
+_PROVIDER_LABELS = {"kakao": "카카오", "naver": "네이버", "google": "구글"}
+
+
+def _provider_label(provider: str) -> str:
+    return _PROVIDER_LABELS.get(provider, provider)
+
+
 def _refresh_session_key(user_id: int, jti: str) -> str:
     """기기(세션) 단위 refresh token 키. 로그인 시 등록, 로그아웃/탈퇴 시 삭제."""
     return f"refresh_session:{user_id}:{jti}"
@@ -52,6 +59,12 @@ async def send_email_verification_code(email: str, db: AsyncSession) -> None:
     """이메일로 6자리 인증번호를 발송하고 Redis에 TTL과 함께 저장한다."""
     existing = await user_repo.get_by_email(email, db)
     if existing is not None:
+        if existing.provider != "local":
+            label = _provider_label(existing.provider)
+            raise ConflictException(
+                message=f"이미 {label} 로그인으로 가입된 이메일입니다. {label} 로그인을 이용해주세요.",
+                code="SOCIAL_ACCOUNT_EXISTS",
+            )
         raise ConflictException(message="이미 가입된 이메일입니다.")
 
     code = f"{secrets.randbelow(1_000_000):06d}"
@@ -135,6 +148,12 @@ async def register_local_user(
     """
     existing = await user_repo.get_by_email(email, db)
     if existing is not None:
+        if existing.provider != "local":
+            label = _provider_label(existing.provider)
+            raise ConflictException(
+                message=f"이미 {label} 로그인으로 가입된 이메일입니다. {label} 로그인을 이용해주세요.",
+                code="SOCIAL_ACCOUNT_EXISTS",
+            )
         raise ConflictException(message="이미 가입된 이메일입니다.")
 
     if await redis_client.get(_email_verified_key(email)) is None:
@@ -162,7 +181,18 @@ async def register_local_user(
 async def login_local_user(email: str, password: str, db: AsyncSession) -> User:
     """이메일/비밀번호 로그인."""
     user = await user_repo.get_by_email(email, db)
-    if user is None or user.password_hash is None or not verify_password(password, user.password_hash):
+    if user is None:
+        raise UnauthorizedException(message="이메일 또는 비밀번호가 올바르지 않습니다.", code="INVALID_CREDENTIALS")
+
+    if user.password_hash is None:
+        # OAuth로 가입해 비밀번호가 없는 계정. 소셜 로그인 안내.
+        label = _provider_label(user.provider)
+        raise UnauthorizedException(
+            message=f"{label} 로그인으로 가입된 계정입니다. {label} 로그인을 이용해주세요.",
+            code="SOCIAL_LOGIN_REQUIRED",
+        )
+
+    if not verify_password(password, user.password_hash):
         raise UnauthorizedException(message="이메일 또는 비밀번호가 올바르지 않습니다.", code="INVALID_CREDENTIALS")
 
     await user_repo.update_last_login(user, db)
