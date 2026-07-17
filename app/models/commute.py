@@ -46,3 +46,23 @@ class CommuteQuery(Base):
     queried_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # TODO(구현 필요): 외부 지도 API 응답 캐싱(같은 출발/도착 좌표 + 짧은 시간 내 재요청 시 캐시 활용)
+
+
+class CommuteFavorite(Base):
+    """로그인 사용자가 등록한 즐겨찾기 출발지-목적지 경로 (최대 3개, 서비스 레이어에서 제한)."""
+
+    __tablename__ = "commute_favorites"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    label: Mapped[str] = mapped_column(String(30))  # 예: "출근길", "헬스장"
+
+    origin_address: Mapped[str] = mapped_column(String(255))
+    origin_lat: Mapped[float] = mapped_column(Float)
+    origin_lng: Mapped[float] = mapped_column(Float)
+
+    destination_address: Mapped[str] = mapped_column(String(255))
+    destination_lat: Mapped[float] = mapped_column(Float)
+    destination_lng: Mapped[float] = mapped_column(Float)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

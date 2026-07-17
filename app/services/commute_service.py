@@ -4,10 +4,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import ForbiddenException, NotFoundException
+from app.core.exceptions import ForbiddenException, InvalidRequestException, NotFoundException
 from app.external import map_directions_client
 from app.models.commute import CommuteRoute
 from app.repositories import commute_repo
+
+MAX_COMMUTE_FAVORITES = 3
 
 
 async def list_routes(user_id: int, db: AsyncSession) -> list[CommuteRoute]:
@@ -116,3 +118,75 @@ async def check_commute(
         "recommended_departure_time": None,
         "route_polyline": directions["route_polyline"],
     }
+
+
+async def list_favorites(user_id: int, db: AsyncSession) -> list:
+    return await commute_repo.list_favorites(user_id, db)
+
+
+async def add_favorite(
+    user_id: int,
+    label: str,
+    origin_address: str, origin_lat: float, origin_lng: float,
+    destination_address: str, destination_lat: float, destination_lng: float,
+    db: AsyncSession,
+):
+    existing = await commute_repo.list_favorites(user_id, db)
+    if len(existing) >= MAX_COMMUTE_FAVORITES:
+        raise InvalidRequestException(
+            message=f"교통 즐겨찾기는 최대 {MAX_COMMUTE_FAVORITES}개까지 등록할 수 있습니다.",
+            code="COMMUTE_FAVORITE_LIMIT_EXCEEDED",
+        )
+
+    favorite = await commute_repo.create_favorite(
+        user_id, label,
+        origin_address, origin_lat, origin_lng,
+        destination_address, destination_lat, destination_lng,
+        db,
+    )
+    await db.commit()
+    await db.refresh(favorite)
+    return favorite
+
+
+async def remove_favorite(favorite_id: int, user_id: int, db: AsyncSession) -> None:
+    favorite = await commute_repo.get_favorite(favorite_id, db)
+    if not favorite:
+        raise NotFoundException("즐겨찾기를 찾을 수 없습니다.")
+    if favorite.user_id != user_id:
+        raise ForbiddenException()
+
+    await commute_repo.delete_favorite(favorite_id, db)
+    await db.commit()
+
+
+async def get_favorites_commute(user_id: int, db: AsyncSession) -> list[dict]:
+    """즐겨찾기 경로들의 현재 소요시간을 각각 조회. 로그 저장은 하지 않는다(main.py 새로고침 시 매번 쌓이지 않도록)."""
+    favorites = await commute_repo.list_favorites(user_id, db)
+
+    items = []
+    for favorite in favorites:
+        directions = await map_directions_client.get_directions(
+            favorite.origin_lat, favorite.origin_lng,
+            favorite.destination_lat, favorite.destination_lng,
+        )
+        items.append(
+            {
+                "favorite": {
+                    "id": favorite.id,
+                    "label": favorite.label,
+                    "origin_address": favorite.origin_address,
+                    "origin_lat": favorite.origin_lat,
+                    "origin_lng": favorite.origin_lng,
+                    "destination_address": favorite.destination_address,
+                    "destination_lat": favorite.destination_lat,
+                    "destination_lng": favorite.destination_lng,
+                },
+                "commute": {
+                    "estimated_minutes": directions["estimated_minutes"],
+                    "delay_minutes": directions["delay_minutes"],
+                    "delay_reason": directions["delay_reason"],
+                },
+            }
+        )
+    return items

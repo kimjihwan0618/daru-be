@@ -40,3 +40,35 @@ class CommuteRouteResponse(BaseModel):
     latitude: float
     longitude: float
     is_default: bool
+
+
+class CommuteFavoriteCreateRequest(BaseModel):
+    label: str
+    origin_address: str
+    origin_lat: float
+    origin_lng: float
+    destination_address: str
+    destination_lat: float
+    destination_lng: float
+
+
+class CommuteFavoriteResponse(BaseModel):
+    id: int
+    label: str
+    origin_address: str
+    origin_lat: float
+    origin_lng: float
+    destination_address: str
+    destination_lat: float
+    destination_lng: float
+
+
+class CommuteEstimate(BaseModel):
+    estimated_minutes: int
+    delay_minutes: int
+    delay_reason: str | None = None
+
+
+class FavoriteCommuteItem(BaseModel):
+    favorite: CommuteFavoriteResponse
+    commute: CommuteEstimate

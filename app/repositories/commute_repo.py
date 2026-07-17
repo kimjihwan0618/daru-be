@@ -5,7 +5,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models.commute import CommuteQuery, CommuteRoute
+from app.models.commute import CommuteFavorite, CommuteQuery, CommuteRoute
 
 
 async def list_routes(user_id: int, db: AsyncSession) -> list[CommuteRoute]:
@@ -66,3 +66,41 @@ async def save_query(
     db.add(query)
     await db.flush()
     return query
+
+
+async def list_favorites(user_id: int, db: AsyncSession) -> list[CommuteFavorite]:
+    result = await db.execute(
+        select(CommuteFavorite).where(CommuteFavorite.user_id == user_id).order_by(CommuteFavorite.id)
+    )
+    return list(result.scalars().all())
+
+
+async def get_favorite(favorite_id: int, db: AsyncSession) -> CommuteFavorite | None:
+    result = await db.execute(select(CommuteFavorite).where(CommuteFavorite.id == favorite_id))
+    return result.scalar_one_or_none()
+
+
+async def create_favorite(
+    user_id: int,
+    label: str,
+    origin_address: str, origin_lat: float, origin_lng: float,
+    destination_address: str, destination_lat: float, destination_lng: float,
+    db: AsyncSession,
+) -> CommuteFavorite:
+    favorite = CommuteFavorite(
+        user_id=user_id,
+        label=label,
+        origin_address=origin_address,
+        origin_lat=origin_lat,
+        origin_lng=origin_lng,
+        destination_address=destination_address,
+        destination_lat=destination_lat,
+        destination_lng=destination_lng,
+    )
+    db.add(favorite)
+    await db.flush()
+    return favorite
+
+
+async def delete_favorite(favorite_id: int, db: AsyncSession) -> None:
+    await db.execute(delete(CommuteFavorite).where(CommuteFavorite.id == favorite_id))
