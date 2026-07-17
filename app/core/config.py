@@ -49,13 +49,27 @@ class Settings(BaseSettings):
     # --- 외부 데이터 API ---
     NAVER_NEWS_API_CLIENT_ID: str = ""
     NAVER_NEWS_API_CLIENT_SECRET: str = ""
-    STOCK_PRICE_API_KEY: str = ""
+    STOCK_PRICE_API_KEY: str = ""  # 한국투자증권 OpenAPI APP_KEY
+    STOCK_PRICE_API_SECRET: str = ""  # 한국투자증권 OpenAPI APP_SECRET
     MAP_DIRECTIONS_API_KEY: str = ""
     WEATHER_API_KEY: str = ""
 
     # --- 게스트(비로그인) ---
     GUEST_SESSION_TTL_HOURS: int = 24
     GUEST_SESSION_HEADER_NAME: str = "X-Guest-Session-Id"
+
+    # --- 게스트 기본값 (지역/경로 미지정 시 사용) ---
+    DEFAULT_WEATHER_LAT: float = 37.5665
+    DEFAULT_WEATHER_LNG: float = 126.9780
+
+    DEFAULT_COMMUTE_ORIGIN_LABEL: str = "강남역"
+    DEFAULT_COMMUTE_ORIGIN_LAT: float = 37.4979
+    DEFAULT_COMMUTE_ORIGIN_LNG: float = 127.0276
+    DEFAULT_COMMUTE_DESTINATION_LABEL: str = "서울역"
+    DEFAULT_COMMUTE_DESTINATION_LAT: float = 37.5547
+    DEFAULT_COMMUTE_DESTINATION_LNG: float = 126.9707
+
+    DEFAULT_TOP_STOCKS: list[str] = ["005930", "000660", "035420"]  # 삼성전자, SK하이닉스, NAVER
 
     # --- RAG ---
     NEWS_CLUSTER_SIMILARITY_THRESHOLD: float = 0.85

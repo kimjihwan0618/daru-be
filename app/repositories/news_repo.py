@@ -30,4 +30,19 @@ async def list_active_issues(
     raise NotImplementedError
 
 
-# TODO(구현 필요): search_issues(키워드 검색), get_issues_by_stock_code 등 추가
+async def get_issues_by_stock_code(
+    code: str,
+    cursor_id: int | None,
+    limit: int,
+    db: AsyncSession,
+) -> list[IssueCluster]:
+    """related_stock_codes에 code가 포함된 이슈 목록 (id 내림차순)."""
+    stmt = select(IssueCluster).where(IssueCluster.related_stock_codes.contains([code]))
+    if cursor_id is not None:
+        stmt = stmt.where(IssueCluster.id < cursor_id)
+    stmt = stmt.order_by(IssueCluster.id.desc()).limit(limit)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+# TODO(구현 필요): search_issues(키워드 검색) 추가

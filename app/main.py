@@ -17,6 +17,7 @@ from app.routers import (
     schedule,
     stock,
     user,
+    weather,
 )
 
 app = FastAPI(
@@ -59,6 +60,7 @@ app.include_router(commute.router, prefix=API_PREFIX)
 app.include_router(interest.router, prefix=API_PREFIX)
 app.include_router(schedule.router, prefix=API_PREFIX)
 app.include_router(user.router, prefix=API_PREFIX)
+app.include_router(weather.router, prefix=API_PREFIX)
 
 
 @app.get("/health", tags=["health"])

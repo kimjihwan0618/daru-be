@@ -3,7 +3,9 @@
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import ForbiddenException, NotFoundException
+from app.external import map_directions_client
 from app.models.commute import CommuteRoute
 from app.repositories import commute_repo
 
@@ -64,10 +66,53 @@ async def check_commute(
     db: AsyncSession,
 ) -> dict:
     """
-    TODO(구현 필요):
-    1. use_default=True && user_id 있으면 CommuteRoute(HOME/WORK) 조회해 좌표 사용
-    2. 아니면 origin/destination 주소 geocoding (map_directions_client)
-    3. 길찾기 API 호출 -> estimated_minutes, delay_minutes 계산
-    4. commute_repo.save_query() 로 로그 저장
+    1. use_default=True && 로그인 사용자면 CommuteRoute(HOME/WORK) 좌표 사용
+    2. origin/destination 주소가 있으면 geocoding
+    3. 둘 다 없으면(비로그인 기본값) 설정값(config)의 기본 경로 사용
+    4. 길찾기 API 호출 -> estimated_minutes, delay_minutes 계산
+    5. commute_repo.save_query() 로 로그 저장
     """
-    raise NotImplementedError
+    if use_default and user_id:
+        routes = await commute_repo.list_routes(user_id, db)
+        home = next((r for r in routes if r.label == "HOME"), None)
+        work = next((r for r in routes if r.label == "WORK"), None)
+        if not home or not work:
+            raise NotFoundException("등록된 집/회사 경로가 없습니다.")
+        origin_label, origin_lat, origin_lng = home.address, home.latitude, home.longitude
+        dest_label, dest_lat, dest_lng = work.address, work.latitude, work.longitude
+    elif origin_address and destination_address:
+        origin_label = origin_address
+        dest_label = destination_address
+        origin_lat, origin_lng = await map_directions_client.geocode(origin_address)
+        dest_lat, dest_lng = await map_directions_client.geocode(destination_address)
+    else:
+        origin_label = settings.DEFAULT_COMMUTE_ORIGIN_LABEL
+        origin_lat, origin_lng = settings.DEFAULT_COMMUTE_ORIGIN_LAT, settings.DEFAULT_COMMUTE_ORIGIN_LNG
+        dest_label = settings.DEFAULT_COMMUTE_DESTINATION_LABEL
+        dest_lat, dest_lng = settings.DEFAULT_COMMUTE_DESTINATION_LAT, settings.DEFAULT_COMMUTE_DESTINATION_LNG
+
+    directions = await map_directions_client.get_directions(origin_lat, origin_lng, dest_lat, dest_lng)
+
+    await commute_repo.save_query(
+        user_id=user_id,
+        origin_address=origin_label,
+        destination_address=dest_label,
+        origin_lat=origin_lat,
+        origin_lng=origin_lng,
+        dest_lat=dest_lat,
+        dest_lng=dest_lng,
+        estimated_minutes=directions["estimated_minutes"],
+        delay_minutes=directions["delay_minutes"],
+        db=db,
+    )
+    await db.commit()
+
+    return {
+        "origin": {"label": origin_label, "lat": origin_lat, "lng": origin_lng},
+        "destination": {"label": dest_label, "lat": dest_lat, "lng": dest_lng},
+        "estimated_minutes": directions["estimated_minutes"],
+        "delay_minutes": directions["delay_minutes"],
+        "delay_reason": directions["delay_reason"],
+        "recommended_departure_time": None,
+        "route_polyline": directions["route_polyline"],
+    }

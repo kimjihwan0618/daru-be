@@ -14,6 +14,7 @@ from app.models.news import (  # noqa: F401
 from app.models.schedule import Schedule  # noqa: F401
 from app.models.stock import Stock  # noqa: F401
 from app.models.user import GuestInterest, User, UserInterest  # noqa: F401
+from app.models.weather import WeatherFavorite  # noqa: F401
 
 __all__ = [
     "User",
@@ -30,4 +31,5 @@ __all__ = [
     "CommuteRoute",
     "CommuteQuery",
     "Schedule",
+    "WeatherFavorite",
 ]
